@@ -1,0 +1,386 @@
+# Curated local models for this machine:
+#   RTX 5080 16 GB (~13.3 GB free while the Windows desktop is running)
+#   Ryzen 7 9800X3D (8C/16T), 64 GB DDR5 (48 GB visible to WSL via .wslconfig)
+#
+# ── Integrity ──────────────────────────────────────────────────────────────────
+# Every file is pinned twice: to a Hugging Face commit (`revision`) and to its sha256
+# (the `[model.files]` table). `make install` streams each download through sha256 and
+# refuses anything that does not match; `make use` re-checks before serving.
+# The only thing that changes a pin is `make accept MODEL=<id>`, which shows the upstream
+# diff and rewrites `revision` + `[model.files]` for that one model after you confirm.
+#
+# ── safety ─────────────────────────────────────────────────────────────────────
+#   A  original vendor weights, packaged by the vendor or by ggml-org (llama.cpp maintainers)
+#   B  original weights re-quantized by an established third party (unsloth), or a
+#      reputable fine-tune (ThinkingCap / bottlecapai): you are trusting that party's weights
+#   C  abliterated: a third party deliberately removed refusal behaviour. No guardrails, and it
+#      will follow instructions injected via files, web pages or issues without pushback, so
+#      do not give it shell/tool access over untrusted input
+# All weights are data-only formats (GGUF / safetensors). Pickle formats (.bin/.pt/.pth/.ckpt)
+# and repository code (.py) are refused by scripts/models.py regardless of what is listed here.
+#
+# ── placement (LLMs, served by llama.cpp) ─────────────────────────────────────
+#   gpu    every layer on the GPU; context is grown automatically to fill the VRAM that is left
+#          (`ctx` is the minimum: startup fails rather than spilling to system RAM)
+#   split  fixed `ctx`; llama.cpp --fit keeps attention/dense weights on the GPU and moves MoE
+#          expert tensors (or whole layers, for dense models) into system RAM until it fits.
+#          Cheap for MoE (~3B active params per token), noticeably slower for dense models.
+#
+# ── claude_code (wiring a served model into Claude Code: `make claude`) ───────
+#   yes      works through llama-server's Anthropic Messages endpoint with tool calls
+#   limited  works, but the context that fits is small next to Claude Code's 15-30K-token base
+#            prompt (more with MCP servers / CLAUDE.md), so sessions compact early and often
+#   no       cannot be wired up: not a chat model
+# Anthropic does not support or test Claude Code with non-Claude models; agent quality depends on
+# the model. Only entries marked "tested" in their note have been run end to end.
+#
+# Sizes are file sizes; the KV cache and compute buffers need roughly 1-3 GB on top.
+
+[settings]
+default_llm = "qwen3.6-35b-a3b"   # used by `make up` before any `make use`
+fit_margin_mib = 1024             # VRAM llama.cpp leaves free (Windows desktop, browser, etc.)
+threads = 8                       # physical cores; matters when MoE experts run on the CPU
+kv_cache_type = "q8_0"            # halves KV-cache VRAM vs f16 at negligible quality cost
+
+# ═══ Coding / general LLMs: fit entirely on the GPU ═══════════════════════════
+
+[[model]]
+id = "qwen3.8-27b-gpu"
+kind = "llm"
+name = "Qwen3.8 27B, 3-bit (GPU-only)"
+use = "coding: best quality that fits fully in VRAM; fastest of the 27B options"
+claude_code = "limited"  # context is whatever VRAM is left after 10.9 GB of weights (~40K); Claude Code's own prompt is 15-30K tokens, so long sessions compact often
+arch = "dense 27B, hybrid linear attention (small KV cache)"
+placement = "gpu"
+ctx = 32768
+safety = "B"
+publisher = "unsloth (re-quant of Qwen/Qwen3.8-27B)"
+license = "apache-2.0"
+size_gb = 10.9
+repo = "unsloth/Qwen3.8-27B-GGUF"
+revision = "4ca720788d1e01f1bff70c033e0d0028fd02e502"
+gguf = "Qwen3.8-27B-UD-IQ3_XXS.gguf"
+mmproj = "mmproj-F16.gguf"
+sampling = { temp = 1.0, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty = 0.0 }
+[model.files]
+"Qwen3.8-27B-UD-IQ3_XXS.gguf" = "c0b7c3038681ed2e3040456c1dd45f9858b6c2290bed172c70388a94874f3eee"
+"mmproj-F16.gguf" = "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+
+[[model]]
+id = "gemma4-12b"
+kind = "llm"
+name = "Gemma 4 12B QAT (GPU-only)"
+use = "fast general/coding assistant; small enough to leave VRAM for TTS at the same time"
+claude_code = "yes"  # tested 2026-11-01: tool calls work, 262K context; small model, weak at long multi-step agent tasks
+arch = "dense 12B"
+placement = "gpu"
+ctx = 32768
+safety = "A"
+publisher = "Google (official QAT GGUF)"
+license = "apache-2.0"
+size_gb = 7.0
+repo = "google/gemma-4-12B-it-qat-q4_0-gguf"
+revision = "29d097773436b69ff9feafd636ab4cf873786537"
+gguf = "gemma-4-12b-it-qat-q4_0.gguf"
+mmproj = "mmproj-gemma-4-12b-it-qat-q4_0.gguf"
+sampling = { temp = 1.0, top_p = 0.95, top_k = 64 }
+[model.files]
+"gemma-4-12b-it-qat-q4_0.gguf" = "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b"
+"mmproj-gemma-4-12b-it-qat-q4_0.gguf" = "cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7"
+
+# ═══ Coding / general LLMs: split across GPU + system RAM ═════════════════════
+
+[[model]]
+id = "qwen3.6-35b-a3b"
+kind = "llm"
+name = "Qwen3.6 35B-A3B, 4-bit"
+use = "coding: best speed/quality balance for agentic coding; recommended default"
+claude_code = "yes"  # tested 2026-11-01: multi-step read/edit/run works; ~21 tok/s, first turn ~36 s to read the prompt
+arch = "MoE 35B total / 3B active, hybrid linear attention"
+placement = "split"
+ctx = 65536
+mtp = false  # file has an MTP head, but measured 17.9 vs 23.9 tok/s: drafts pull extra experts from CPU RAM
+safety = "B"
+publisher = "unsloth (re-quant of Qwen/Qwen3.6-35B-A3B)"
+license = "apache-2.0"
+size_gb = 22.9
+repo = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF"
+revision = "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"
+gguf = "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
+mmproj = "mmproj-F16.gguf"
+# Qwen's "thinking mode for precise coding" settings
+sampling = { temp = 0.6, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty = 0.0 }
+[model.files]
+"Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf" = "55983c5a75a1ab969824077b3bb3de4146e82a9234072b48ad4e8f92ad3fe9f1"
+"mmproj-F16.gguf" = "71f3cbc1f7cc0f30d09d41cfa924c0060827ebc33bf15ace7e86661e856f0160"
+
+[[model]]
+id = "qwen3.8-27b"
+kind = "llm"
+name = "Qwen3.8 27B, 4-bit"
+use = "coding: highest quality here; dense, so ~5 GB runs from RAM and decoding is slower"
+claude_code = "yes"  # strongest coder here, but dense split decoding is slow for an agent loop
+arch = "dense 27B, hybrid linear attention"
+placement = "split"
+ctx = 65536
+safety = "B"
+publisher = "unsloth (re-quant of Qwen/Qwen3.8-27B)"
+license = "apache-2.0"
+size_gb = 17.6
+repo = "unsloth/Qwen3.8-27B-GGUF"
+revision = "4ca720788d1e01f1bff70c033e0d0028fd02e502"
+gguf = "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+mmproj = "mmproj-F16.gguf"
+sampling = { temp = 1.0, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty = 0.0 }
+[model.files]
+"Qwen3.8-27B-UD-Q4_K_XL.gguf" = "3f227079003add2511437e5b1e94812e363385225bf6a9b47b0054a72bc8b01e"
+"mmproj-F16.gguf" = "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+
+[[model]]
+id = "thinkingcap-qwen3.8-27b"
+kind = "llm"
+name = "ThinkingCap Qwen3.8 27B, RCO 4.2bpw + MTP"
+use = "coding/reasoning: ~37% fewer thinking tokens than base Qwen3.8 at near-equal accuracy"
+claude_code = "yes"  # fewer thinking tokens = faster agent turns
+arch = "dense 27B fine-tune, mixed-precision quant"
+placement = "split"
+ctx = 65536
+mtp = true  # dense: drafts reuse the same weights, so MTP should help even when split (untested here)
+safety = "B"
+publisher = "bottlecapai (ThinkingCap fine-tune of Qwen3.8-27B)"
+license = "polyform-small-business-1.0.0 (free for personal / small-business use)"
+size_gb = 14.3
+repo = "bottlecapai/ThinkingCap-Qwen3.8-27B-GGUF-RCO-4.2bpw"
+revision = "67c3324641f39f169e1cbc8280f9748e890f3046"
+gguf = "ThinkingCap-Qwen3.8-27B-RCO-4.2bpw.gguf"
+mmproj = "mmproj-ThinkingCap-Qwen3.8-27B-f16.gguf"
+sampling = { temp = 1.0, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty = 0.0 }
+[model.files]
+"ThinkingCap-Qwen3.8-27B-RCO-4.2bpw.gguf" = "bfb7712f21ad131d64321c4f9ce42417be0fe7a52bd2ff69d263012ddf631654"
+"mmproj-ThinkingCap-Qwen3.8-27B-f16.gguf" = "51a19874a75524454cc8b77285f06c9ab654498a845bdb3a4cc4a70f8ae1030e"
+
+[[model]]
+id = "gemma4-26b-a4b"
+kind = "llm"
+name = "Gemma 4 26B-A4B QAT"
+use = "general/coding with vision; mostly on GPU, only ~2 GB of experts spill to RAM"
+claude_code = "yes"
+arch = "MoE 26B total / 4B active"
+placement = "split"
+ctx = 65536
+safety = "A"
+publisher = "Google (official QAT GGUF)"
+license = "apache-2.0"
+size_gb = 14.4
+repo = "google/gemma-4-26B-A4B-it-qat-q4_0-gguf"
+revision = "d1c082be9cf3c8a514acf63b8761f4b41935842e"
+gguf = "gemma-4-26B_q4_0-it.gguf"
+mmproj = "gemma-4-26B-it-mmproj.gguf"
+sampling = { temp = 1.0, top_p = 0.95, top_k = 64 }
+[model.files]
+"gemma-4-26B_q4_0-it.gguf" = "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d"
+"gemma-4-26B-it-mmproj.gguf" = "a359953a076b877db30c31dbbb4c6d93b4a6e017ee5db5784247e4d4c0dd4f3b"
+
+[[model]]
+id = "thinkingcap-gemma4-26b-a4b"
+kind = "llm"
+name = "ThinkingCap Gemma 4 26B-A4B, IQ4_XS"
+use = "general/coding: token-efficient reasoning on the Gemma 4 MoE"
+claude_code = "yes"
+arch = "MoE 26B total / 4B active, fine-tune"
+placement = "split"
+ctx = 65536
+safety = "B"
+publisher = "bottlecapai (ThinkingCap fine-tune of google/gemma-4-26B-A4B-it)"
+license = "apache-2.0"
+size_gb = 13.6
+repo = "bottlecapai/ThinkingCap-gemma-4-26B-A4B-it-GGUF"
+revision = "bb52b322579d218a9931261d6c9cd7403d80eb96"
+gguf = "ThinkingCap-gemma-4-26B-A4B-it-IQ4_XS.gguf"
+mmproj = "mmproj-ThinkingCap-gemma-4-26B-A4B-it-f16.gguf"
+sampling = { temp = 1.0, top_p = 0.95, top_k = 64 }
+[model.files]
+"ThinkingCap-gemma-4-26B-A4B-it-IQ4_XS.gguf" = "c84bb3c8b997cc7c8fbd5922f3abb362f92ebf5d290654a90bcef5a10c021085"
+"mmproj-ThinkingCap-gemma-4-26B-A4B-it-f16.gguf" = "4030b92de0d559d7a0cde19659761adc3d8454f06503adb8dac425acfd67c239"
+
+[[model]]
+id = "nemotron3.5-lightning-30b-a3b"
+kind = "llm"
+name = "NVIDIA Nemotron 3.5 Lightning 30B-A3B"
+use = "agentic coding / tool use; strong SWE-bench claims in NVIDIA's card; hybrid Mamba = small KV"
+claude_code = "yes"  # built for agentic tool use
+arch = "MoE 30B total / 3B active, hybrid Mamba-Transformer"
+placement = "split"
+ctx = 65536
+safety = "A"
+publisher = "ggml-org (conversion of nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B)"
+license = "NVIDIA Open Model License"
+size_gb = 18.9
+repo = "ggml-org/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF"
+revision = "8cd082170ed313484be1cf44f256a5caa2cfdad3"
+gguf = "NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q4_0.gguf"
+sampling = { temp = 1.0, top_p = 0.95 }
+[model.files]
+"NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q4_0.gguf" = "61f87e75974e4b535dcdf9aad056541a9514f1dfa4538b463b081d19b7a00e3c"
+
+[[model]]
+id = "gpt-oss-20b"
+kind = "llm"
+name = "gpt-oss 20B (MXFP4)"
+use = "fast baseline with adjustable reasoning effort; nearly all on GPU"
+claude_code = "yes"  # fast, but weaker at multi-file edits than the Qwen models
+arch = "MoE 21B total / 3.6B active"
+placement = "split"
+ctx = 65536
+safety = "A"
+publisher = "ggml-org (conversion of openai/gpt-oss-20b)"
+license = "apache-2.0"
+size_gb = 12.1
+repo = "ggml-org/gpt-oss-20b-GGUF"
+revision = "15dcfc7e7c608c6161507211ed43c5b590801b4b"
+gguf = "gpt-oss-20b-MXFP4.gguf"
+sampling = { temp = 1.0, top_p = 1.0, top_k = 0 }
+[model.files]
+"gpt-oss-20b-MXFP4.gguf" = "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901"
+
+# ═══ Abliterated (refusals removed: safety C) ═════════════════════════════════
+# huihui-ai is the most established abliteration publisher. Combined ThinkingCap+abliterated
+# uploads exist but come from one-off accounts, so they are deliberately not listed.
+
+[[model]]
+id = "qwen3.8-27b-abliterated-gpu"
+kind = "llm"
+name = "Huihui Qwen3.8 27B abliterated, 3-bit (GPU-only)"
+use = "uncensored: no refusals; fits fully in VRAM"
+claude_code = "limited"  # same ~40K context limit as qwen3.8-27b-gpu; safety C: Claude Code gives the model a shell, so never point it at untrusted repos
+arch = "dense 27B, abliterated"
+placement = "gpu"
+ctx = 32768
+safety = "C"
+publisher = "huihui-ai (abliteration of Qwen/Qwen3.8-27B)"
+license = "apache-2.0"
+size_gb = 11.0
+repo = "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF"
+revision = "1c69098e9c32db6dc06fc48f1d6cc75ad07da89e"
+gguf = "Huihui-Qwen3.8-27B-abliterated-UD-IQ3_XXS.gguf"
+sampling = { temp = 1.0, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty = 0.0 }
+[model.files]
+"Huihui-Qwen3.8-27B-abliterated-UD-IQ3_XXS.gguf" = "e86259c841888b06fd84750963a0263947c9aae3c3029b52cbb3faa34a554827"
+
+[[model]]
+id = "qwen3.6-35b-a3b-abliterated"
+kind = "llm"
+name = "Huihui Qwen3.6 35B-A3B abliterated, 4-bit"
+use = "uncensored: no refusals; MoE split, good speed"
+claude_code = "yes"  # works, but safety C: Claude Code gives the model a shell, so never point it at untrusted repos
+arch = "MoE 35B total / 3B active, abliterated"
+placement = "split"
+ctx = 65536
+mtp = false  # file has an MTP head, but measured 17.9 vs 23.9 tok/s: drafts pull extra experts from CPU RAM
+safety = "C"
+publisher = "huihui-ai (abliteration of Qwen/Qwen3.6-35B-A3B)"
+license = "apache-2.0"
+size_gb = 21.7
+repo = "huihui-ai/Huihui-Qwen3.6-35B-A3B-abliterated-MTP-GGUF"
+revision = "acd5abe0c5ebd064f3863ca7d4bba2d924ec6544"
+gguf = "Huihui-Qwen3.6-35B-A3B-abliterated-ggml-model-Q4_K.gguf"
+mmproj = "mmproj-model-f16.gguf"
+sampling = { temp = 0.6, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty = 0.0 }
+[model.files]
+"Huihui-Qwen3.6-35B-A3B-abliterated-ggml-model-Q4_K.gguf" = "63b75afb4b68fc61059c78115b580037074de88146e0762f4a496081e410cf81"
+"mmproj-model-f16.gguf" = "41578def81dbfd5c193f3b4633f9ab45e3c85f116442d6b2025464082f201d6d"
+
+# ═══ Voice: text-to-speech with voice cloning ═════════════════════════════════
+# Not served from here: these are downloaded + verified for use by another project, which loads
+# them from local disk (`make path MODEL=<id>`), ideally offline (HF_HUB_OFFLINE=1).
+# Snapshot models download every file matching `include` at the pinned revision.
+# `library` is the Python package that loads the weights; `vram_mib` is a rough working figure.
+
+[[model]]
+id = "omnivoice"
+kind = "tts"
+library = "omnivoice==0.2.1 (needs transformers>=5.3)"
+name = "OmniVoice (k2-fsa)"
+use = "voice cloning from 3-10 s of reference audio; inline CMUdict phonemes fix mispronunciations, e.g. [K UW1 B K AH0 N T R OW2 L]"
+claude_code = "no"  # speech model, not a chat model
+arch = "diffusion-LM TTS, 24 kHz, ~3 GB fp16"
+safety = "A"
+publisher = "k2-fsa (Next-gen Kaldi team)"
+license = "apache-2.0 (code; the HF card states no separate weights license)"
+size_gb = 3.3
+vram_mib = 5000
+repo = "k2-fsa/OmniVoice"
+revision = "c5fdb5ccb189668d56333f77ba2629f4cd7535f4"
+snapshot = true
+include = ["*.json", "*.safetensors", "*.txt", "*.jinja"]
+[model.files]
+"audio_tokenizer/config.json" = "eefb20806f7104e77c9a5277c9df0f9bb8826b08eb1d4e8ab2b9829b6ef9fac1"
+"audio_tokenizer/model.safetensors" = "fe7c5e8785e0a05833e1bfc3e002ec7f55af21e306b2e7154a448c1f54ccfb0d"
+"audio_tokenizer/preprocessor_config.json" = "ae61eea88558608ee2fa86d2aec9fce8d99a5ff75d09cb7651ccce21ae1d9084"
+"chat_template.jinja" = "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+"config.json" = "5e359117e13b420c5e0c925d4aba650d624767131f1d1746928f8b850d5dc372"
+"model.safetensors" = "730839316de585f4c8298ec0e1712efc10fb19c6fa4e36eb741cb8d51ebcf6aa"
+"tokenizer.json" = "408f669b7e2b045fdf54201d815bd364e6667dbd845115da81239c40bc6dcfd1"
+"tokenizer_config.json" = "49f78845596a82bf15c83673794bdf9f76f812b11f60ab6a2239d9be65b00676"
+
+[[model]]
+id = "qwen3-tts-1.7b"
+kind = "tts"
+library = "qwen-tts==0.1.1 (pins transformers==4.57.3, so keep it in a separate env from OmniVoice)"
+name = "Qwen3-TTS 12Hz 1.7B Base"
+use = "voice cloning with very natural prosody; no phoneme input, so fix pronunciation by respelling words"
+claude_code = "no"  # speech model, not a chat model
+arch = "1.7B speech LM + 12 Hz speech tokenizer"
+safety = "A"
+publisher = "Qwen (Alibaba)"
+license = "apache-2.0"
+size_gb = 4.5
+vram_mib = 7000
+repo = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+revision = "fd4b254389122332181a7c3db7f27e918eec64e3"
+snapshot = true
+include = ["*.json", "*.safetensors", "*.txt"]
+[model.files]
+"config.json" = "b4f01752d15a488abde3e1ab44723ae4f4b9e68a4037257b098b3737893cc1f9"
+"generation_config.json" = "f1b90b4513f3b34c62851049e2492d7b4c5940daf1276f89c82b8ef04127f3aa"
+"merges.txt" = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"model.safetensors" = "38fc7fc51c5e776e840414b6fd443962e9411b9654888fd7913e4da643cb857c"
+"preprocessor_config.json" = "efdde1022ea9d76928bf7a9cd53139138f5ba2e466e837f08f6105ab1af1c119"
+"speech_tokenizer/config.json" = "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167"
+"speech_tokenizer/configuration.json" = "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd"
+"speech_tokenizer/model.safetensors" = "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+"speech_tokenizer/preprocessor_config.json" = "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb"
+"tokenizer_config.json" = "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670"
+"vocab.json" = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+
+# ═══ Speech recognition ═══════════════════════════════════════════════════════
+
+[[model]]
+id = "whisper-large-v3-turbo"
+kind = "asr"
+library = "transformers (pipeline 'automatic-speech-recognition')"
+name = "Whisper large-v3-turbo"
+use = "transcripts of voice reference clips (cloners need them); round-trip checks for mispronounced words"
+claude_code = "no"  # speech recognition model, not a chat model
+vram_mib = 2500
+arch = "809M encoder-decoder"
+safety = "A"
+publisher = "OpenAI"
+license = "mit"
+size_gb = 1.6
+repo = "openai/whisper-large-v3-turbo"
+revision = "41f01f3fe87f28c78e2fbf8b568835947dd65ed9"
+snapshot = true
+include = ["*.json", "*.safetensors", "*.txt"]
+[model.files]
+"added_tokens.json" = "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0"
+"config.json" = "c5b526b3e3cd64cd8940dabb45e8ba726629e22d8ed389c29b552f9140daf04a"
+"generation_config.json" = "cce11bfe3aaa6ae9e072ea2637caaec8795e68d9b67e655a5af16ee509681a4c"
+"merges.txt" = "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6"
+"model.safetensors" = "542566a422ae4f3fd23f1ba11add198fca01bbf82e66e6a2857b3f608b1eb9d1"
+"normalizer.json" = "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd"
+"preprocessor_config.json" = "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711"
+"special_tokens_map.json" = "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74"
+"tokenizer.json" = "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd"
+"tokenizer_config.json" = "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389"
+"vocab.json" = "e2aa043ef015641d363d8288e7c241c85e36a5c761fb303598e0710233344387"

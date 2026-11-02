@@ -1,0 +1,19 @@
+# Benchmark settings for `make bench`.
+
+[dataset]
+# OpenAI HumanEval: 164 Python function-completion problems with unit tests (MIT).
+# Pinned to a commit and sha256 like the models; downloaded on first use.
+name = "HumanEval"
+url = "https://raw.githubusercontent.com/openai/human-eval/b9453e8f1865df0a0057a1383767caa400acfbcf/data/HumanEval.jsonl.gz"
+sha256 = "b796127e635a67f93fb35c04f4cb03cf06f38c8072ee7cee8833d7bee06979ef"
+
+[humaneval]
+limit = 40              # problems per run, evenly spread over the 164 (LIMIT=all for the full set)
+max_tokens = 16384      # room for thinking; a reply cut off here counts as a failure
+seed = 42               # sampling uses each model's settings from models.toml, with a fixed seed
+request_timeout_s = 1800
+
+[speed]
+prompt_tokens = [4096, 24576]   # 24K ~ a Claude Code first turn; skipped if larger than the context
+generate_tokens = 256
+generate_runs = 3               # generation tok/s is the median of these

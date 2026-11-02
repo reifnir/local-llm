@@ -1,0 +1,62 @@
+name: local-llm
+
+services:
+  # One LLM at a time, served by llama.cpp. `make use MODEL=<id>` writes .state/llama.args
+  # and recreates this container; `make down` removes it.
+  llm:
+    # llama.cpp build 12004 (2026-10-30), CUDA 12.8 (Blackwell-capable). Pinned by digest so the tag
+    # cannot be moved. The cuda13 variant needs a driver reporting CUDA >= 13.4; this one reports 13.3.
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda-b12004@sha256:f25bfa096802cdf35ceb7d124816387a1e3ed5cbfc869eb242246cd29ab29352
+    entrypoint: ["/bin/sh", "/opt/local-llm/llama-entrypoint.sh"]
+    gpus: all
+    ports:
+      - "127.0.0.1:${LLM_PORT:-8080}:8080" # localhost only
+    volumes:
+      - ./models:/models:ro
+      - ./.state:/state:ro
+      - ./scripts/llama-entrypoint.sh:/opt/local-llm/llama-entrypoint.sh:ro
+    healthcheck: # `make use` waits on this (docker compose up --wait)
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 3
+      start_period: 15m # loading a 20+ GB model from disk can take a while
+      start_interval: 2s
+    restart: "no"
+
+  # scripts/models.py (list / install / verify / accept / ...), so the host needs nothing but Docker.
+  # Same compose network as `llm`, so it reaches the server at http://llm:8080.
+  tool:
+    profiles: ["tool"]
+    image: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    entrypoint: ["python", "/work/scripts/models.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /work
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}       # only needed for gated Hugging Face repos
+      HOST_ROOT: ${HOST_ROOT:-/work} # lets `make path` print host paths
+      LLM_PORT: ${LLM_PORT:-8080}    # host port, for the URLs `make claude-env` prints
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - .:/work
+
+  # Executes model-written benchmark code (bench/evaluate.py). No network, read-only root,
+  # no capabilities, capped memory/CPU/processes; it sees only the completions file, read-only,
+  # and reports results on stdout.
+  sandbox:
+    profiles: ["tool"]
+    image: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    entrypoint: ["python", "-I", "/opt/evaluate.py"]
+    network_mode: none
+    read_only: true
+    user: "65534:65534"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 4g
+    cpus: 4
+    pids_limit: 128
+    tmpfs:
+      - /tmp:size=256m
+    volumes:
+      - ./bench/evaluate.py:/opt/evaluate.py:ro
+      - ./bench/runs:/runs:ro

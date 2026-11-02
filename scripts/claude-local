@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Run Claude Code in the current directory against the model local-llm is serving.
+# Usage: <local-llm>/scripts/claude-local [claude args...]   (symlink it onto your PATH)
+set -euo pipefail
+repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+command -v claude >/dev/null || { echo "claude CLI not found on PATH" >&2; exit 1; }
+env_lines="$(make -s -C "$repo" claude-env)"
+eval "$env_lines"
+exec claude "$@"
