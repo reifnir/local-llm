@@ -2,3 +2,5 @@
 /.state/
 .envrc
 /bench/runs/
+.terraform
+terraform.tfstate*

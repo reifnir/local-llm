@@ -47,10 +47,11 @@ else
 
 ## Usage:   make list
 ## Inputs:  none (reads models.toml and .state/)
-## Output:  one table each for LLMs, text-to-speech and speech recognition models. Columns: id,
-##          placement (gpu / split), download size in GB, safety grade (A / B / C), installed,
-##          and what it's for. `*` marks the selected LLM, `d` the default for `make up`.
-list: ## Table of curated models (installed, selected, safety)
+## Output:  one table each for LLMs, text-to-speech, speech recognition and source weights.
+##          Columns: id, placement (gpu / split), download size in GB, safety grade (A / B / C),
+##          published by (the Hugging Face account the files come from), installed, and what it's
+##          for. `*` marks the selected LLM, `d` the default for `make up`.
+list: ## Table of curated models (installed, selected, safety, publisher)
 	@$(TOOL) list
 
 ## Usage:   make install <id>        (or MODEL=<id>)

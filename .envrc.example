@@ -1,5 +1,5 @@
 # Copy to .env (git-ignored).
-# Hugging Face token: only needed for gated repos. Read-only scope is enough.
+# Hugging Face token: only needed for gated repos. Read-only scope is enough if we aren't uploading to HF.
 HF_TOKEN=
 # Host port for the llama.cpp server (bound to 127.0.0.1 only)
 LLM_PORT=8080

@@ -13,7 +13,7 @@ Everything runs in Docker. The host needs Docker (with the NVIDIA runtime) and `
 ## Quick start
 
 ```bash
-make list                         # the curated table: size, placement, safety, installed
+make list                         # the curated table: size, placement, safety, publisher, installed
 make install qwen3.6-35b-a3b      # download + sha256-verify (same as MODEL=qwen3.6-35b-a3b)
 make use qwen3.6-35b-a3b          # serve it; switching models is just another `make use`
 make chat                         # quick prompt, shows tokens/s
@@ -188,8 +188,10 @@ For mispronunciations:
 - **Turn off CUDA sysmem fallback.** In NVIDIA Control Panel → Manage 3D settings, set
   *CUDA – Sysmem Fallback Policy* to *Prefer No Sysmem Fallback*. Otherwise the Windows driver
   can silently page VRAM into system RAM, which makes a `gpu` model crawl instead of failing.
-- **WSL memory.** WSL is capped at 48 GB by `%UserProfile%\.wslconfig`. The largest split model
-  here needs about 12 GB of RAM, which is fine. Raise `memory=` if you add bigger MoE models.
+- **WSL memory.** WSL is capped at 56 GB (plus 32 GB swap) by `%UserProfile%\.wslconfig`, leaving
+  about 8 GB for Windows. Serving needs little of it (the largest split model uses about 12 GB of
+  RAM); the headroom is for loading BF16 safetensors with `device_map="auto"`, e.g. to abliterate
+  Qwen3.8-27B (~54 GB: ~12 GB on the GPU, the rest in RAM). Run `wsl --shutdown` after editing it.
 - **Why llama.cpp rather than Ollama.** Expert-level MoE offload (`--fit`), loading
   ThinkingCap/huihui GGUFs straight from Hugging Face with sha256 pins, and MTP speculative
   decoding are all first-class in llama.cpp. Ollama runs the same engine underneath.

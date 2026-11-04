@@ -1,5 +1,7 @@
 locals {
-  instance_type = "g7.24xlarge"
+  # instance_type = "g7.24xlarge"
+  # TESTING: cheap stand-in while the G and VT quota request is pending.
+  instance_type = "t2.xlarge"
   # g7 isn't offered in us-east-1e/f; pinning the AZ picks that AZ's default subnet.
   availability_zone = "us-east-1a"
 }
@@ -11,6 +13,11 @@ data "aws_vpc" "default" {
 # Amazon Linux 2023 with NVIDIA open drivers, CUDA, and the SSM agent preinstalled.
 data "aws_ssm_parameter" "dlami_al2023" {
   name = "/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-amazon-linux-2023/latest/ami-id"
+}
+
+# TESTING: plain AL2023 for the t2.medium; the DLAMI only supports GPU instance types.
+data "aws_ssm_parameter" "al2023" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
 
 data "aws_iam_policy_document" "ec2_assume_role" {
@@ -53,7 +60,10 @@ resource "aws_vpc_security_group_egress_rule" "llm_all" {
 }
 
 resource "aws_instance" "llm" {
-  ami                    = data.aws_ssm_parameter.dlami_al2023.value
+  # ami                    = data.aws_ssm_parameter.dlami_al2023.value
+  # TESTING: switching back needs `terraform apply -replace=aws_instance.llm`,
+  # since ignore_changes = [ami] would otherwise keep this AMI on the GPU instance.
+  ami                    = data.aws_ssm_parameter.al2023.value
   instance_type          = local.instance_type
   availability_zone      = local.availability_zone
   iam_instance_profile   = aws_iam_instance_profile.llm.name
@@ -71,6 +81,8 @@ resource "aws_instance" "llm" {
     volume_type = "gp3"
     volume_size = 200
     encrypted   = true
+    # Instance store NVMe is always wiped and released on termination; this covers the EBS root.
+    delete_on_termination = true
   }
 
   tags = {

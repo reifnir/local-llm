@@ -342,19 +342,23 @@ def cmd_list(args) -> None:
     settings, models = load_config()
     active = (read_active() or {}).get("id")
     kinds = {"llm": "LLMs (make use MODEL=<id>)", "tts": "Text-to-speech (make path MODEL=<id>)",
-             "asr": "Speech recognition (make path MODEL=<id>)"}
+             "asr": "Speech recognition (make path MODEL=<id>)",
+             "source": "Source weights: full precision, for converting / quantizing (make path MODEL=<id>)"}
     for kind, title in kinds.items():
         rows = [m for m in models.values() if m["kind"] == kind]
         if not rows:
             continue
         print(f"\n{title}")
-        print(f"  {'':2}{'id':30} {'where':6} {'GB':>5}  {'safety':14} {'inst':4}  use")
+        print(f"  {'':2}{'id':30} {'where':6} {'GB':>5}  {'safety':14} {'published by':12} {'inst':4}  use")
         for m in rows:
             mark = "*" if m["id"] == active else ("d" if m["id"] == settings.get("default_llm") else "")
             safety = f"{m['safety']} {SAFETY_LABELS.get(m['safety'], '')}"
+            uploader = m["repo"].split("/")[0]  # the Hugging Face account the pinned files come from
             print(f"  {mark:2}{m['id']:30} {m.get('placement', '-'):6} {m.get('size_gb', 0):5.1f}  "
-                  f"{safety:14} {'yes' if is_installed(m) else '-':4}  {m.get('use', '')}")
-    print("\n  * = selected for serving   d = default for `make up`   safety: see the header of models.toml")
+                  f"{safety:14} {uploader:12} {'yes' if is_installed(m) else '-':4}  {m.get('use', '')}")
+    print("\n  * = selected for serving   d = default for `make up`   safety: see the header of models.toml\n"
+          "  published by = the Hugging Face account the files are downloaded from; `publisher` in models.toml\n"
+          "  says what each one is derived from")
 
 
 def cmd_install(args) -> None:
@@ -447,6 +451,9 @@ def cmd_select(args) -> None:
     settings, models = load_config()
     mid = args.model or (read_active() or {}).get("id") or settings.get("default_llm")
     m = get_model(models, mid)
+    if m["kind"] == "source":
+        raise Fail(f"{m['id']} is full-precision source weights (safetensors), which llama.cpp cannot serve; "
+                   f"serve a GGUF quantized from it instead. Its files are at: make path MODEL={m['id']}")
     if m["kind"] != "llm":
         raise Fail(f"{m['id']} is a {m['kind']} model; only LLMs are served here. "
                    f"Its files are at: make path MODEL={m['id']}")
