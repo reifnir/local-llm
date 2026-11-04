@@ -1,0 +1,7 @@
+#cloud-config
+# The agent ships with AL2023; this keeps it present and running if the AMI changes.
+packages:
+  - amazon-ssm-agent
+
+runcmd:
+  - systemctl enable --now amazon-ssm-agent

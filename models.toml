@@ -117,24 +117,24 @@ sampling = { temp = 0.6, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty
 [[model]]
 id = "qwen3.8-27b"
 kind = "llm"
-name = "Qwen3.8 27B, 4-bit"
-use = "coding: highest quality here; dense, so ~5 GB runs from RAM and decoding is slower"
+name = "Qwen3.8 27B, 4-bit (Q4_K_M)"
+use = "coding: highest quality here; dense, so ~7 GB runs from RAM and decoding is slower"
 claude_code = "yes"  # strongest coder here, but dense split decoding is slow for an agent loop
 arch = "dense 27B, hybrid linear attention"
 placement = "split"
 ctx = 65536
-safety = "B"
-publisher = "unsloth (re-quant of Qwen/Qwen3.8-27B)"
+safety = "A"
+publisher = "ggml-org (llama.cpp maintainers' conversion of Qwen/Qwen3.8-27B)"
 license = "apache-2.0"
-size_gb = 17.6
-repo = "unsloth/Qwen3.8-27B-GGUF"
-revision = "4ca720788d1e01f1bff70c033e0d0028fd02e502"
-gguf = "Qwen3.8-27B-UD-Q4_K_XL.gguf"
-mmproj = "mmproj-F16.gguf"
+size_gb = 19.0
+repo = "ggml-org/Qwen3.8-27B-GGUF"
+revision = "a316ea527fde32c12487be7574e2db5ac2ad2a7e"
+gguf = "Qwen3.8-27B-Q4_K_M.gguf"
+mmproj = "mmproj-Qwen3.8-27B-Q8_0.gguf"
 sampling = { temp = 1.0, top_p = 0.95, top_k = 20, min_p = 0.0, presence_penalty = 0.0 }
 [model.files]
-"Qwen3.8-27B-UD-Q4_K_XL.gguf" = "3f227079003add2511437e5b1e94812e363385225bf6a9b47b0054a72bc8b01e"
-"mmproj-F16.gguf" = "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+"Qwen3.8-27B-Q4_K_M.gguf" = "c600de0300ae8a0eb3a6c0b8b5561b8b96f16bd2c863c2a66c42de29d391a747"
+"mmproj-Qwen3.8-27B-Q8_0.gguf" = "2e968a6af97ce35d8971890b257b9b7edabf20ad91450501fa53162a19ee33eb"
 
 [[model]]
 id = "thinkingcap-qwen3.8-27b"

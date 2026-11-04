@@ -1,4 +1,4 @@
 /models/
 /.state/
-.env
+.envrc
 /bench/runs/
