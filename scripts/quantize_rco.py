@@ -467,8 +467,8 @@ def main() -> None:
     print(f"""
 Done: {out}
 Review README.md, then upload (repos are public by default; --private keeps it to you):
-  uvx --from huggingface_hub hf repo create <you>/{args.name}-GGUF --private
-  uvx --from huggingface_hub hf upload <you>/{args.name}-GGUF {out} .
+  uvx --from huggingface_hub==2.4.0 hf repos create <you>/{args.name}-GGUF --private
+  uvx --from huggingface_hub==2.4.0 hf upload <you>/{args.name}-GGUF {out} .
 The NVMe disk is wiped when the instance stops: upload or copy {out} first.""")
 
 
