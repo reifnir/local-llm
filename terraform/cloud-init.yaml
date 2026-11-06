@@ -5,3 +5,18 @@ packages:
 
 runcmd:
   - systemctl enable --now amazon-ssm-agent
+  # Terraform attaches the volume after the instance is running, so wait for it. mkfs.xfs refuses to
+  # overwrite an existing filesystem, so only a blank volume gets formatted.
+  - |
+    dev=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${replace(volume_id, "-", "")}
+    until [ -b "$dev" ]; do sleep 2; done
+    blkid "$dev" || mkfs.xfs "$dev"
+    mkdir -p /data
+    echo "$dev /data xfs defaults,nofail 0 2" >> /etc/fstab
+    mount /data
+    chmod 1777 /data
+  # Retries because the role's policy can still be propagating at first boot.
+  - |
+    until token=$(aws secretsmanager get-secret-value --region ${region} --secret-id ${hf_token_secret_arn} --query SecretString --output text); do sleep 5; done
+    printf "export HF_TOKEN='%s'\n" "$token" > /etc/profile.d/hf-token.sh
+    unset token

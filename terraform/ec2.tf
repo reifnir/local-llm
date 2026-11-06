@@ -1,8 +1,20 @@
 locals {
   instance_type = "g7e.8xlarge"
-  # g7e is only offered in us-east-1b/c/d; pinning the AZ picks that AZ's default subnet.
-  availability_zone = "us-east-1c"
+  persistent    = data.terraform_remote_state.persistent.outputs
 }
+
+# The data volume and HF token live in their own project so this one can be applied and destroyed freely.
+data "terraform_remote_state" "persistent" {
+  backend = "s3"
+
+  config = {
+    region = "us-east-1"
+    bucket = "reifnir-root-terraform-state-primary"
+    key    = "reifnir-public-projects/local-llm/persistent/terraform.tfstate"
+  }
+}
+
+data "aws_region" "current" {}
 
 data "aws_vpc" "default" {
   default = true
@@ -34,6 +46,19 @@ resource "aws_iam_role_policy_attachment" "llm_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+data "aws_iam_policy_document" "read_hf_token" {
+  statement {
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [local.persistent.hf_token_secret_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "llm_read_hf_token" {
+  name   = "read-hf-token"
+  role   = aws_iam_role.llm.id
+  policy = data.aws_iam_policy_document.read_hf_token.json
+}
+
 resource "aws_iam_instance_profile" "llm" {
   name = "local-llm-instance"
   role = aws_iam_role.llm.name
@@ -55,10 +80,16 @@ resource "aws_vpc_security_group_egress_rule" "llm_all" {
 resource "aws_instance" "llm" {
   ami                    = data.aws_ssm_parameter.dlami_al2023.value
   instance_type          = local.instance_type
-  availability_zone      = local.availability_zone
+  availability_zone      = local.persistent.availability_zone
   iam_instance_profile   = aws_iam_instance_profile.llm.name
   vpc_security_group_ids = [aws_security_group.llm.id]
-  user_data              = file("${path.module}/cloud-init.yaml")
+  user_data = templatefile("${path.module}/cloud-init.yaml", {
+    volume_id           = local.persistent.data_volume_id
+    hf_token_secret_arn = local.persistent.hf_token_secret_arn
+    region              = data.aws_region.current.region
+  })
+  # One-time spot instances can't be stopped, which an in-place user_data update would need.
+  user_data_replace_on_change = true
 
   # Needed to reach the SSM endpoints from the default VPC (no NAT or VPC endpoints).
   associate_public_ip_address = true
@@ -94,6 +125,14 @@ resource "aws_instance" "llm" {
     # Don't replace the instance every time a new DLAMI is published.
     ignore_changes = [ami]
   }
+}
+
+resource "aws_volume_attachment" "data" {
+  device_name = "/dev/sdf"
+  volume_id   = local.persistent.data_volume_id
+  instance_id = aws_instance.llm.id
+  # The volume is mounted, so a detach would hang on destroy. Terminating the instance releases it.
+  skip_destroy = true
 }
 
 output "instance_id" {
