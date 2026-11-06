@@ -3,3 +3,7 @@
 HF_TOKEN=
 # Host port for the llama.cpp server (bound to 127.0.0.1 only)
 LLM_PORT=8080
+# Terraform state. Each project's key is <prefix>/ec2/terraform.tfstate or <prefix>/persistent/terraform.tfstate.
+export TERRAFORM_STATE_REGION="us-east-1"
+export TERRAFORM_STATE_BUCKET="reifnir-root-terraform-state-primary"
+export TERRAFORM_STATE_KEY_PREFIX="reifnir-public-projects/local-llm"
