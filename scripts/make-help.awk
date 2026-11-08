@@ -10,12 +10,12 @@
 
 /^##( |$)/ { doc = doc substr($0, 4) "\n"; next }
 
-/^[a-z][a-z-]*:.*## / {
+/^[a-z][a-z0-9-]*:.*## / {
     name = $0; sub(/:.*/, "", name)
     summary = $0; sub(/^[^#]*## /, "", summary)
     names = names " " name
     if (topic == "") {
-        printf "  %-13s %s\n", name, summary
+        printf "  %-16s %s\n", name, summary
     } else if (name == topic) {
         printf "make %s: %s\n\n%s", name, summary, doc
         found = 1

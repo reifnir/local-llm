@@ -41,7 +41,7 @@ $(filter-out help,$(TOPICS)):
 	@:
 else
 
-.PHONY: list install path remove use up down status logs chat claude claude-env bench bench-report verify accept pull
+.PHONY: list install path remove use up down status logs chat claude claude-env bench bench-report verify accept pull init-persistent init-ec2 _tf_check
 
 ##@ Models
 
@@ -226,6 +226,36 @@ verify: ## Re-hash installed files (all, or just MODEL) against models.toml
 ##          that diff. Downloads nothing; run `make install` afterwards.
 accept: ## Review upstream changes for MODEL and re-pin revision + sha256 in models.toml
 	@$(TOOL) accept $(MODEL) $(if $(REV),--revision $(REV)) $(if $(YES),--yes)
+
+##@ Terraform
+
+TF_STATE_VARS := TERRAFORM_STATE_REGION TERRAFORM_STATE_BUCKET TERRAFORM_STATE_KEY_PREFIX
+TF_BACKEND = -backend-config="region=$(TERRAFORM_STATE_REGION)" \
+  -backend-config="bucket=$(TERRAFORM_STATE_BUCKET)" \
+  -backend-config="key=$(TERRAFORM_STATE_KEY_PREFIX)/$(1)/terraform.tfstate"
+
+_tf_check:
+	@$(foreach v,$(TF_STATE_VARS),[ -n "$($(v))" ] || { echo "$(v) is not set (export it or add it to .env)"; exit 1; };)
+
+## Usage:   make init-persistent
+## Inputs:  TERRAFORM_STATE_REGION, TERRAFORM_STATE_BUCKET, TERRAFORM_STATE_KEY_PREFIX, from
+##          the environment or .env.
+## Output:  `terraform init` for terraform/persistent against the S3 state key
+##          <prefix>/persistent/terraform.tfstate. Applies nothing; afterwards run
+##          `TF_VAR_hf_token="$HF_TOKEN" terraform apply` in terraform/persistent.
+init-persistent: ## terraform init for terraform/persistent (S3 backend)
+	@$(MAKE) --no-print-directory _tf_check
+	terraform -chdir=terraform/persistent init $(call TF_BACKEND,persistent)
+
+## Usage:   make init-ec2
+## Inputs:  TERRAFORM_STATE_REGION, TERRAFORM_STATE_BUCKET, TERRAFORM_STATE_KEY_PREFIX, from
+##          the environment or .env.
+## Output:  `terraform init` for terraform/ec2 against the S3 state key
+##          <prefix>/ec2/terraform.tfstate. Applies nothing; afterwards run `terraform apply`
+##          in terraform/ec2.
+init-ec2: ## terraform init for terraform/ec2 (S3 backend)
+	@$(MAKE) --no-print-directory _tf_check
+	terraform -chdir=terraform/ec2 init $(call TF_BACKEND,ec2)
 
 ##@ Other
 

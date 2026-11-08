@@ -1,18 +1,3 @@
-## TF
-
-terraform init \
-  -backend-config="region=$TERRAFORM_STATE_REGION" \
-  -backend-config="bucket=$TERRAFORM_STATE_BUCKET" \
-  -backend-config="key=$TERRAFORM_STATE_KEY_PREFIX/persistent/terraform.tfstate"
-TF_VAR_hf_token="$HF_TOKEN" terraform apply
-
-
-terraform init \
-  -backend-config="region=$TERRAFORM_STATE_REGION" \
-  -backend-config="bucket=$TERRAFORM_STATE_BUCKET" \
-  -backend-config="key=$TERRAFORM_STATE_KEY_PREFIX/ec2/terraform.tfstate"
-terraform apply
-
 
 ## EC2
 
