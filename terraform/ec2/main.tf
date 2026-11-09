@@ -1,5 +1,6 @@
 provider "aws" {
-  region = "us-east-1"
+  # Wherever the persistent project put the data volume.
+  region = data.terraform_remote_state.persistent.outputs.region
 }
 
 data "aws_caller_identity" "current" {}
