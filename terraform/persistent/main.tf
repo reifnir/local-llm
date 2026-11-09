@@ -13,7 +13,7 @@ provider "aws" {
 
 locals {
   # g7e is only offered in us-east-1b/c/d. The instance has to launch in the volume's AZ.
-  availability_zone = "us-east-1c"
+  availability_zone = "us-east-1d"
   # Write-only values aren't stored in state, so Terraform can't see a change. Bump this to push a new token.
   hf_token_version = 1
 }
