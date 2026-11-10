@@ -257,6 +257,24 @@ init-ec2: ## terraform init for terraform/ec2 (S3 backend)
 	@$(MAKE) --no-print-directory _tf_check
 	terraform -chdir=terraform/ec2 init $(call TF_BACKEND,ec2)
 
+# RunInstances can't queue for spot capacity, so retry the whole apply while AWS reports none.
+SPOT_CAPACITY_ERRORS := InsufficientInstanceCapacity|InsufficientCapacity
+RETRY_DELAY ?= 60
+
+## Usage:   make apply-ec2 [RETRY_DELAY=<seconds>]
+## Inputs:  AWS credentials; terraform/ec2 already initialized (`make init-ec2`).
+##          RETRY_DELAY: seconds between attempts (default 60).
+## Output:  `terraform apply -auto-approve` in terraform/ec2 (no approval prompt), re-run
+##          after RETRY_DELAY whenever it fails with a spot capacity error, until it
+##          succeeds. Stops on any other error. Ctrl-C to give up.
+apply-ec2: ## terraform apply for terraform/ec2, retrying until spot capacity is available
+	@log=$$(mktemp); trap 'rm -f "$$log"' EXIT; attempt=1; \
+	until terraform -chdir=terraform/ec2 apply -auto-approve -input=false 2>&1 | tee "$$log"; [ "$${PIPESTATUS[0]}" -eq 0 ]; do \
+	  grep -Eq '$(SPOT_CAPACITY_ERRORS)' "$$log" || exit 1; \
+	  echo "apply-ec2: no spot capacity (attempt $$attempt), retrying in $(RETRY_DELAY)s" >&2; \
+	  attempt=$$((attempt + 1)); sleep $(RETRY_DELAY); \
+	done
+
 ##@ Other
 
 ## Usage:   make pull
